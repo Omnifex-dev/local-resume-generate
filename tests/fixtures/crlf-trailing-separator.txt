@@ -1,0 +1,8 @@
+Data Engineer at Initech
+Build pipelines with Python, Airflow and dbt for analytics.
+////////
+
+QA Engineer at Hooli
+Write automated tests with Playwright across web apps.
+//////////
+   

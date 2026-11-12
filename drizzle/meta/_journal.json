@@ -1,0 +1,55 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1794320751900,
+      "tag": "0000_sad_landau",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1794323404915,
+      "tag": "0001_yellow_vision",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1794325490083,
+      "tag": "0002_clean_shiver_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1794326651143,
+      "tag": "0003_odd_mentallo",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1794332351913,
+      "tag": "0004_fresh_spitfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1794406578364,
+      "tag": "0005_admin_and_pending",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1794422132939,
+      "tag": "0006_email_signup",
+      "breakpoints": true
+    }
+  ]
+}

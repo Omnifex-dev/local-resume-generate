@@ -1,0 +1,52 @@
+{
+  "name": "resume-generate",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.9"
+  },
+  "scripts": {
+    "setup": "bash scripts/setup.sh",
+    "dev": "next dev",
+    "build": "next build",
+    "build:check": "NEXT_DIST_DIR=.next-check next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "db:up": "docker compose up -d --wait db",
+    "db:down": "docker compose down",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:studio": "drizzle-kit studio",
+    "admin:create": "node scripts/create-admin.mjs"
+  },
+  "dependencies": {
+    "@node-rs/argon2": "^2.0.2",
+    "drizzle-orm": "^0.44.2",
+    "next": "15.5.28",
+    "pino": "^9.7.0",
+    "postgres": "^3.4.7",
+    "react": "19.1.0",
+    "react-dom": "19.1.0",
+    "server-only": "^0.0.1",
+    "word-extractor": "^1.0.4",
+    "zod": "^3.25.67"
+  },
+  "devDependencies": {
+    "@eslint/eslintrc": "^3.3.1",
+    "@tailwindcss/postcss": "^4.1.11",
+    "@types/node": "^22.15.30",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "dotenv": "^16.5.0",
+    "drizzle-kit": "^0.31.4",
+    "eslint": "^9.29.0",
+    "eslint-config-next": "15.5.28",
+    "tailwindcss": "^4.1.11",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

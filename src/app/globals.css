@@ -1,0 +1,49 @@
+@import "tailwindcss";
+
+/* Light/dark is chosen by the user (sun/moon button) and set as <html class="dark">. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark;
+}
+
+body {
+  @apply bg-slate-50 text-slate-900 antialiased dark:bg-[#03040c] dark:text-slate-100;
+}
+
+/* Visible, thin scrollbars for the workspace columns and modals. */
+.scroll-panel {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(148 163 184 / 0.7) transparent;
+  scrollbar-gutter: stable;
+}
+.scroll-panel::-webkit-scrollbar {
+  width: 8px;
+}
+.scroll-panel::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background: rgb(148 163 184 / 0.7);
+}
+
+/* Auth pages: panels rise in gently. */
+@keyframes auth-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.auth-rise {
+  animation: auth-rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-rise {
+    animation: none;
+  }
+}

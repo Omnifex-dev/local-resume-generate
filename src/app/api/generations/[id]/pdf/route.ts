@@ -47,7 +47,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
     logger.info({ userId: user.id, generationId: id, theme, ms: Date.now() - started, bytes: pdf.length }, "pdf rendered");
 
     // Older records (made before file names were stored) get a name in the same format.
-    const name = gen.pdfFileName ?? `${resumeFileBase(gen.role ?? "Role", gen.company ?? "Company", gen.createdAt.getTime())}.pdf`;
+    const name = gen.pdfFileName ?? `${resumeFileBase(null, gen.role ?? "Role", gen.company ?? "Company")}.pdf`;
     return new Response(new Uint8Array(pdf), {
       headers: {
         "Content-Type": "application/pdf",

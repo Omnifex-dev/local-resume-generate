@@ -18,7 +18,7 @@ const out = (o: Partial<AiOutput>): AiOutput => ({
   additional_info: [],
   ...o,
 });
-import { resumeFileBase, safeFilePart } from "@/lib/filename";
+import { fileNumber, resumeFileBase, safeFilePart } from "@/lib/filename";
 import { adminDefaultsSchema, settingsSchema, DEFAULT_PROMPT } from "@/lib/settings-schema";
 
 const history: WorkHistoryItem[] = [
@@ -167,10 +167,18 @@ describe("toResumeContent", () => {
 
 describe("filenames", () => {
   it("builds safe, readable names", () => {
-    expect(resumeFileBase("Sr. Engineer / Backend", "Acme, Inc.", 1731312000000)).toBe("Sr._Engineer_Backend-Acme_Inc-1731312000000");
+    expect(resumeFileBase(3, "Sr. Engineer / Backend", "Acme, Inc.")).toBe("3-Sr._Engineer_Backend-Acme_Inc");
+    expect(resumeFileBase(null, "Dev", "Acme")).toBe("Dev-Acme");
     expect(safeFilePart("../../etc/passwd")).toBe("etc_passwd");
     expect(safeFilePart("Müller GmbH")).toBe("Müller_GmbH");
     expect(safeFilePart("///")).toBe("untitled");
+  });
+
+  it("reads the day number back from a file name", () => {
+    expect(fileNumber("12-Dev-Acme.pdf")).toBe(12);
+    expect(fileNumber("Dev-Acme-1731312000000.pdf")).toBeNull();
+    expect(fileNumber("2026_Engineer-Acme.pdf")).toBeNull();
+    expect(fileNumber(null)).toBeNull();
   });
 });
 

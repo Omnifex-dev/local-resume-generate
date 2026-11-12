@@ -10,7 +10,17 @@ export function safeFilePart(value: string, max = 60): string {
   );
 }
 
-/** "Backend Engineer", "Acme", 1731312000000 → "Backend_Engineer-Acme-1731312000000" */
-export function resumeFileBase(role: string, company: string, timestamp: number): string {
-  return `${safeFilePart(role)}-${safeFilePart(company)}-${timestamp}`;
+/**
+ * 3, "Backend Engineer", "Acme" → "3-Backend_Engineer-Acme". `number` is the
+ * resume's number among the user's resumes of its day; null (older records) → no prefix.
+ */
+export function resumeFileBase(number: number | null, role: string, company: string): string {
+  const name = `${safeFilePart(role)}-${safeFilePart(company)}`;
+  return number === null ? name : `${number}-${name}`;
+}
+
+/** The day number at the start of a file name ("3-Role-Company.pdf" → 3), or null. */
+export function fileNumber(fileName: string | null | undefined): number | null {
+  const m = fileName?.match(/^(\d{1,6})-/);
+  return m ? Number(m[1]) : null;
 }

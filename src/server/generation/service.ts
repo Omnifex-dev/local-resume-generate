@@ -1,6 +1,6 @@
 import "server-only";
-import { and, eq, inArray, ne, notInArray } from "drizzle-orm";
-import { resumeFileBase } from "@/lib/filename";
+import { and, eq, gte, inArray, ne, notInArray } from "drizzle-orm";
+import { fileNumber, resumeFileBase } from "@/lib/filename";
 import { normalizeEdit, type ResumeEdit } from "@/lib/edit-schema";
 import type { JobDescription } from "@/lib/jd";
 import type { ProfileSnapshot } from "@/resume/model";
@@ -172,7 +172,7 @@ export async function retryGenerations(userId: string, ids: string[]) {
 /**
  * Saves the user's edits of a finished record. Bullets of companies that aren't
  * in the record are ignored; companies missing from the edit keep their bullets.
- * The file names follow a changed role or company (same timestamp).
+ * The file names follow a changed role or company (same number).
  */
 export async function updateGenerationContent(userId: string, id: string, edit: ResumeEdit) {
   const row = await getOwnGeneration(userId, id);
@@ -181,8 +181,7 @@ export async function updateGenerationContent(userId: string, id: string, edit: 
 
   const e = normalizeEdit(edit);
   const content = Object.fromEntries(Object.entries(row.content).map(([k, v]) => [k, e.content[k] ?? v]));
-  const stamp = row.pdfFileName?.match(/-(\d{10,})\.pdf$/)?.[1];
-  const base = resumeFileBase(e.role, e.company, stamp ? Number(stamp) : (row.finishedAt ?? row.createdAt).getTime());
+  const base = resumeFileBase(fileNumber(row.pdfFileName), e.role, e.company);
 
   const [updated] = await db
     .update(generations)
@@ -215,6 +214,21 @@ export async function deleteGenerations(userId: string, ids: string[]): Promise<
     .where(and(eq(generations.userId, userId), inArray(generations.id, ids), ne(generations.status, "pending")))
     .returning({ id: generations.id });
   return deleted.map((d) => d.id);
+}
+
+/**
+ * The next free number for a resume finished today (server's local day): one
+ * more than the highest number used today, so numbers stay unique even after a
+ * delete. Safe without locking because the queue runs one job at a time.
+ */
+async function nextDayNumber(userId: string, now = new Date()): Promise<number> {
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const rows = await db
+    .select({ pdfFileName: generations.pdfFileName })
+    .from(generations)
+    .where(and(eq(generations.userId, userId), eq(generations.status, "succeeded"), gte(generations.finishedAt, dayStart)));
+  return rows.reduce((max, r) => Math.max(max, fileNumber(r.pdfFileName) ?? 0), 0) + 1;
 }
 
 /** Tries for each resume before it is marked failed and the queue moves on. */
@@ -279,7 +293,7 @@ async function runGeneration(id: string): Promise<void> {
     const role = row.role ?? (ai.target_role.trim().slice(0, 200) || "Role");
     const company = row.company ?? (ai.target_company.trim().slice(0, 200) || "Company");
     // The content (JSON) exists from here on; the PDF is rendered from it on download.
-    const base = resumeFileBase(role, company, Date.now());
+    const base = resumeFileBase(await nextDayNumber(row.userId), role, company);
 
     await db
       .update(generations)

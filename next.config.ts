@@ -7,6 +7,8 @@ const nextConfig: NextConfig = {
   // Native / Node-only packages must not be bundled into server chunks.
   serverExternalPackages: ["@node-rs/argon2", "pino", "word-extractor"],
   poweredByHeader: false,
+  // Hides the round "N" Next.js dev-tools button in `next dev`.
+  devIndicators: false,
   async headers() {
     return [
       {

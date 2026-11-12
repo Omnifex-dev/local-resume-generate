@@ -20,7 +20,7 @@ export function mergeRecords(current: HistoryEntry[], updates: HistoryEntry[]): 
   return [...map.values()].sort(byNewest);
 }
 
-const fileBase = (r: HistoryEntry) => resumeFileBase(r.role ?? "Role", r.company ?? "Company", Date.parse(r.createdAt));
+const fileBase = (r: HistoryEntry) => resumeFileBase(null, r.role ?? "Role", r.company ?? "Company");
 
 export async function errorMessage(res: Response, fallback: string): Promise<string> {
   const data = (await res.json().catch(() => null)) as { error?: { message?: string } } | null;

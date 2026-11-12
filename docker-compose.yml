@@ -8,9 +8,9 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-resume_generate}
     ports:
       # Bind to localhost only. On Ubuntu, ports published by Docker bypass UFW,
-      # so "5432:5432" would expose the database to the whole network.
-      # Change POSTGRES_PORT if a native PostgreSQL already uses 5432.
-      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+      # so "5433:5432" would expose the database to the whole network.
+      # Host port defaults to 5433 so it never clashes with a native PostgreSQL on 5432.
+      - "127.0.0.1:${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

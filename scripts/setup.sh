@@ -43,10 +43,10 @@ set -a
 set +a
 
 # --- Port check (skip if our container already owns the port) ----------------
-PORT="${POSTGRES_PORT:-5432}"
+PORT="${POSTGRES_PORT:-5433}"
 if [ -z "$(docker compose ps -q --status running db 2>/dev/null)" ]; then
   if ss -ltn 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${PORT}$"; then
-    fail "Port ${PORT} is already in use (often a native PostgreSQL: 'sudo systemctl stop postgresql'). Or set POSTGRES_PORT=5433 in .env and use the same port in DATABASE_URL."
+    fail "Port ${PORT} is already in use. Set POSTGRES_PORT to a free port in .env and use the same port in DATABASE_URL."
   fi
 fi
 

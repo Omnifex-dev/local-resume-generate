@@ -28,7 +28,7 @@ nvm install            # reads .nvmrc → Node 22 (bundles a current npm)
 ```
 
 Notes:
-- If a native PostgreSQL is already running (`systemctl is-active postgresql`), port 5432 is taken. Either stop it (`sudo systemctl stop postgresql`) or set `POSTGRES_PORT=5433` in `.env` and use the same port in `DATABASE_URL`.
+- The Docker PostgreSQL listens on host port **5433** (inside the container it is still 5432), so it does not clash with a native PostgreSQL on 5432. To use another port, set `POSTGRES_PORT` in `.env` and use the same port in `DATABASE_URL`.
 - The database port is bound to `127.0.0.1` on purpose: on Ubuntu, ports published by Docker bypass UFW firewall rules.
 - Folder names like `src/app/(auth)` are Next.js route groups. Quote them in the shell: `cd 'src/app/(auth)'`.
 

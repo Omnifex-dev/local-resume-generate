@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { chatCompletionJson, OpenAIError, verifyApiKey } from "@/server/ai/openai";
+import { chatCompletionJson, isReasoningModel, OpenAIError, verifyApiKey } from "@/server/ai/openai";
 
 const ok = (content: unknown, extra: Record<string, unknown> = {}) =>
   new Response(JSON.stringify({ model: "gpt-x-2026", choices: [{ finish_reason: "stop", message: { content: JSON.stringify(content), ...extra } }] }), { status: 200 });
@@ -26,6 +26,20 @@ describe("chatCompletionJson", () => {
     const body = JSON.parse(init.body as string);
     expect(body.response_format).toMatchObject({ type: "json_schema", json_schema: { name: "s", strict: true } });
     expect(body).not.toHaveProperty("temperature");
+  });
+
+  it("sends reasoning_effort only to reasoning models", async () => {
+    const sent = async (model: string) => {
+      const fetchImpl = vi.fn(async () => ok({}));
+      await chatCompletionJson({ ...base, model, fetchImpl });
+      const [, init] = fetchImpl.mock.calls[0] as unknown as [string, RequestInit];
+      return JSON.parse(init.body as string).reasoning_effort;
+    };
+    expect(await sent("gpt-5")).toBe("low");
+    expect(await sent("o4-mini")).toBe("low");
+    expect(await sent("gpt-4.1-mini")).toBeUndefined();
+    expect(await sent("gpt-5-chat-latest")).toBeUndefined();
+    expect(isReasoningModel("gpt-5-mini")).toBe(true);
   });
 
   it("retries 5xx and rate limits, honouring retry-after", async () => {

@@ -32,7 +32,9 @@ export class GenerationError extends Error {
 // a pending record that is in neither was interrupted (server restart).
 // ---------------------------------------------------------------------------
 
-const CONCURRENCY = 3;
+// One at a time: parallel calls slow each other down (and hit rate limits),
+// which made long reasoning-model calls time out.
+const CONCURRENCY = 1;
 type QueueState = { waiting: string[]; running: Set<string> };
 const g = globalThis as unknown as { __resumeQueue?: QueueState };
 const queue: QueueState = (g.__resumeQueue ??= { waiting: [], running: new Set() });
@@ -144,6 +146,30 @@ export async function retryGeneration(userId: string, id: string) {
 }
 
 /**
+ * Puts several failed records back in the queue (oldest first), like
+ * retryGeneration. Ids that aren't the user's or aren't failed are skipped.
+ */
+export async function retryGenerations(userId: string, ids: string[]) {
+  if (ids.length === 0) return [];
+  const { snapshot, settings } = await readyInputs(userId);
+  const rows = await db
+    .update(generations)
+    .set({
+      status: "pending",
+      error: null,
+      prompt: settings.effectivePrompt,
+      model: settings.effectiveModel,
+      profileSnapshot: snapshot,
+      finishedAt: null,
+    })
+    .where(and(eq(generations.userId, userId), inArray(generations.id, ids), eq(generations.status, "failed")))
+    .returning();
+  rows.sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime()).forEach((r) => enqueue(r.id));
+  logger.info({ userId, count: rows.length }, "generations re-queued");
+  return rows;
+}
+
+/**
  * Saves the user's edits of a finished record. Bullets of companies that aren't
  * in the record are ignored; companies missing from the edit keep their bullets.
  * The file names follow a changed role or company (same timestamp).
@@ -191,6 +217,26 @@ export async function deleteGenerations(userId: string, ids: string[]): Promise<
   return deleted.map((d) => d.id);
 }
 
+/** Tries for each resume before it is marked failed and the queue moves on. */
+const MAX_ATTEMPTS = 2;
+
+/** Errors another attempt can't fix (bad key, no credit, unusable model…). */
+const isPermanent = (err: unknown) =>
+  err instanceof GenerationError ||
+  err instanceof SharedKeyUnreadableError ||
+  (err instanceof OpenAIError && ["auth", "quota", "model", "bad_request"].includes(err.kind));
+
+async function withAttempts<T>(id: string, fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt >= MAX_ATTEMPTS || isPermanent(err)) throw err;
+      logger.warn({ generationId: id, attempt, kind: (err as OpenAIError).kind }, "generation attempt failed, trying again");
+    }
+  }
+}
+
 /** The background step: calls the AI and stores the result (or the error) on the record. */
 async function runGeneration(id: string): Promise<void> {
   const [row] = await db.select().from(generations).where(eq(generations.id, id)).limit(1);
@@ -216,16 +262,19 @@ async function runGeneration(id: string): Promise<void> {
       job: { role: row.role, company: row.company, description: row.jobDescription },
     });
 
-    const { data, model } = await chatCompletionJson({
-      apiKey,
-      model: row.model,
-      messages,
-      schemaName: "tailored_resume",
-      schema: responseSchema(history),
-      baseUrl: env.OPENAI_BASE_URL,
+    const { ai, model } = await withAttempts(id, async () => {
+      const { data, model } = await chatCompletionJson({
+        apiKey,
+        model: row.model,
+        messages,
+        schemaName: "tailored_resume",
+        schema: responseSchema(history),
+        baseUrl: env.OPENAI_BASE_URL,
+      });
+      const ai = parseAiOutput(data);
+      if (!ai) throw new OpenAIError("invalid_output", "OpenAI's answer didn't match the expected format. Please retry.");
+      return { ai, model };
     });
-    const ai = parseAiOutput(data);
-    if (!ai) throw new OpenAIError("invalid_output", "OpenAI's answer didn't match the expected format. Please retry.");
 
     const role = row.role ?? (ai.target_role.trim().slice(0, 200) || "Role");
     const company = row.company ?? (ai.target_company.trim().slice(0, 200) || "Company");

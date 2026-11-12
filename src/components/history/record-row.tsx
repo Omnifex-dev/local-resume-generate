@@ -13,8 +13,10 @@ export function dateSearchText(r: HistoryEntry): string {
   return `${timeFormat.format(d)} ${iso}`;
 }
 
-export function RecordRow({ record: r, file, onPdf, onJson, onRetry, onPreview, onEdit, onDelete, selected, onSelect }: {
+export function RecordRow({ record: r, file, onPdf, onJson, onRetry, onPreview, onEdit, onDelete, selected, onSelect, fresh }: {
   record: HistoryEntry;
+  /** Created in this session: tinted so it stands apart from older records. */
+  fresh?: boolean;
   /** With onSelect, shows a checkbox (disabled while the record is generating). */
   selected?: boolean;
   onSelect?: (checked: boolean) => void;
@@ -34,7 +36,7 @@ export function RecordRow({ record: r, file, onPdf, onJson, onRetry, onPreview, 
 
   return (
     <li
-      className={`rounded-lg border px-3 py-1.5 transition ${selected ? "border-cyan-400/70 bg-cyan-50/60 dark:border-cyan-400/40 dark:bg-cyan-400/[0.06]" : "border-slate-200 dark:border-white/10"}`}
+      className={`rounded-lg border px-3 py-1.5 transition ${selected ? "border-cyan-400/70" : "border-slate-200 dark:border-white/10"} ${selected ? "bg-cyan-50/60 dark:bg-cyan-400/[0.08]" : fresh ? "bg-indigo-50 dark:bg-indigo-400/[0.08]" : "bg-transparent"} ${selected ? "dark:border-cyan-400/40" : ""}`}
     >
       <div className="flex items-center justify-between gap-2">
         {onSelect && (
@@ -167,7 +169,7 @@ export function StatusTabs({ tab, onChange, counts, generating, className = "" }
           onClick={() => onChange(value)}
           className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 py-1 text-sm ${tab === value ? "bg-gradient-to-r from-cyan-500 via-indigo-500 to-fuchsia-500 text-white shadow-lg shadow-indigo-500/25" : "text-slate-600 hover:text-slate-900 dark:text-slate-400 dark:hover:text-slate-100"}`}
         >
-          {value === "not-created" && generating > 0 && <Spinner className="h-3.5 w-3.5" />}
+          {value === "created" && generating > 0 && <Spinner className="h-3.5 w-3.5" />}
           {label}
           {counts && <span className={`rounded-full px-1.5 text-xs ${tab === value ? "bg-white/20" : "bg-slate-100 dark:bg-white/[0.06]"}`}>{counts[value]}</span>}
         </button>

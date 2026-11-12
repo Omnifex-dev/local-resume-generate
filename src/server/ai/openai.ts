@@ -38,6 +38,8 @@ export type ChatJsonOptions = {
   timeoutMs?: number;
   maxRetries?: number;
   maxCompletionTokens?: number;
+  /** Only sent to reasoning models (gpt-5, o-series). Lower = faster, fewer hidden tokens. */
+  reasoningEffort?: "minimal" | "low" | "medium" | "high";
   fetchImpl?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
 };
@@ -86,6 +88,9 @@ async function errorFromResponse(res: Response, model: string): Promise<OpenAIEr
 
 const isRetryable = (e: OpenAIError) => e.kind === "rate_limit" || e.kind === "unavailable";
 
+/** gpt-5*, o1/o3/o4…: models that spend hidden reasoning tokens (except the chat variants). */
+export const isReasoningModel = (model: string) => /^(gpt-5|o\d)/i.test(model) && !/chat/i.test(model);
+
 export async function chatCompletionJson(opts: ChatJsonOptions): Promise<{ data: unknown; model: string }> {
   const {
     apiKey,
@@ -94,9 +99,12 @@ export async function chatCompletionJson(opts: ChatJsonOptions): Promise<{ data:
     schemaName,
     schema,
     baseUrl = "https://api.openai.com/v1",
-    timeoutMs = 120_000,
+    // Reasoning models often need 1–3 minutes for a full resume.
+    timeoutMs = 300_000,
     maxRetries = 2,
-    maxCompletionTokens = 8000,
+    // Includes a reasoning model's hidden reasoning tokens, so leave plenty of room.
+    maxCompletionTokens = 20_000,
+    reasoningEffort = "low",
     fetchImpl = fetch,
     sleep = defaultSleep,
   } = opts;
@@ -106,6 +114,7 @@ export async function chatCompletionJson(opts: ChatJsonOptions): Promise<{ data:
     messages,
     // No temperature: reasoning models (gpt-5, o-series) reject non-default values.
     max_completion_tokens: maxCompletionTokens,
+    ...(isReasoningModel(model) ? { reasoning_effort: reasoningEffort } : {}),
     response_format: { type: "json_schema", json_schema: { name: schemaName, strict: true, schema } },
   });
 

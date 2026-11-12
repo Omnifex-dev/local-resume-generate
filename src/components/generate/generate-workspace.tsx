@@ -5,9 +5,10 @@ import { useEffect, useState, type ReactNode } from "react";
 import { useAutoDownload } from "@/components/history/auto-download";
 import { EditResumeModal, PdfPreviewModal, useRecordDialogs } from "@/components/history/record-dialogs";
 import { dateSearchText, RecordRow, searchInputClass, StatusTabs } from "@/components/history/record-row";
+import { DeleteRecordsModal, RetrySelectedButton, SelectionBar, useRecordSelection } from "@/components/history/record-selection";
 import { errorMessage, redirectToLogin, useHistoryRecords } from "@/components/history/use-history-records";
 import { JdInput } from "@/components/jd/jd-input";
-import { Modal, Panel, PrimaryButton, Spinner } from "@/components/ui";
+import { Modal, Panel, PrimaryButton, SmallButton, Spinner } from "@/components/ui";
 import { inTab, matchesQuery, type HistoryEntry, type HistoryTab } from "@/lib/history";
 import type { JobDescription } from "@/lib/jd";
 import type { PageSize, ThemeId } from "@/lib/themes";
@@ -55,13 +56,15 @@ function useDayStart(): number | null {
 
 export function GenerateWorkspace({ blocker, initialTheme, pageSize, previews, history, profile, generationSettings }: Props) {
   const [theme, setTheme] = useState<ThemeId>(initialTheme);
-  const { records, files, fetchPdf, downloadPdf, downloadJson, saveEdit, retry, addCreated, generating } = useHistoryRecords(history, theme);
+  const { records, files, fresh, fetchPdf, downloadPdf, downloadJson, saveEdit, retry, retryMany, remove, addCreated, generating } = useHistoryRecords(history, theme);
   const dialogs = useRecordDialogs(records);
   const [autoDownload, setAutoDownload] = useAutoDownload();
   const [tab, setTab] = useState<HistoryTab>("created");
   const [query, setQuery] = useState("");
   const [newOpen, setNewOpen] = useState(false);
   const [jdKey, setJdKey] = useState(0);
+  const [toDelete, setToDelete] = useState<HistoryEntry[] | null>(null);
+  const [bulkDownloading, setBulkDownloading] = useState(false);
   const dayStart = useDayStart();
 
   /** Creates the records, then closes the modal. Returns an error message for the form, or null. */
@@ -89,6 +92,15 @@ export function GenerateWorkspace({ blocker, initialTheme, pageSize, previews, h
   const counts = { created: today.filter((r) => inTab(r, "created")).length, "not-created": today.filter((r) => inTab(r, "not-created")).length };
   const shown = today.filter((r) => inTab(r, tab) && matchesQuery(r, query, dateSearchText(r)));
   const q = query.trim();
+  const selection = useRecordSelection(shown);
+  const chosenPdfs = selection.chosen.filter((r) => r.status === "succeeded");
+
+  /** One after another, so the browser doesn't drop parallel downloads. */
+  const downloadChosen = async () => {
+    setBulkDownloading(true);
+    for (const r of chosenPdfs) await downloadPdf(r);
+    setBulkDownloading(false);
+  };
 
   // Each column fills its grid cell; the panels inside scroll their own content.
   const column = "lg:flex lg:min-h-0 lg:flex-col";
@@ -149,6 +161,20 @@ export function GenerateWorkspace({ blocker, initialTheme, pageSize, previews, h
               />
             </div>
 
+            {shown.length > 0 && (
+              <SelectionBar selection={selection} onDelete={setToDelete}>
+                <RetrySelectedButton selection={selection} retryMany={retryMany} />
+                {chosenPdfs.length > 0 && (
+                  <SmallButton onClick={() => void downloadChosen()} disabled={bulkDownloading}>
+                    <span className="flex items-center gap-1">
+                      {bulkDownloading && <Spinner className="h-3 w-3" />}
+                      Download PDFs ({chosenPdfs.length})
+                    </span>
+                  </SmallButton>
+                )}
+              </SelectionBar>
+            )}
+
             {shown.length === 0 ? (
               <p className="py-8 text-center text-sm text-slate-500">
                 {q
@@ -169,6 +195,10 @@ export function GenerateWorkspace({ blocker, initialTheme, pageSize, previews, h
                     onRetry={() => void retry(r)}
                     onPreview={() => dialogs.openPreview(r)}
                     onEdit={() => dialogs.openEdit(r)}
+                    onDelete={() => setToDelete([r])}
+                    selected={selection.selected.has(r.id)}
+                    onSelect={(on) => selection.toggle(r.id, on)}
+                    fresh={fresh.has(r.id)}
                   />
                 ))}
               </ul>
@@ -194,11 +224,17 @@ export function GenerateWorkspace({ blocker, initialTheme, pageSize, previews, h
       </Modal>
       <PdfPreviewModal record={dialogs.preview} theme={theme} fetchPdf={fetchPdf} onEdit={dialogs.openEdit} onClose={dialogs.closePreview} />
       <EditResumeModal record={dialogs.edit} onSave={saveEdit} onClose={dialogs.closeEdit} />
+      <DeleteRecordsModal
+        targets={toDelete}
+        remove={remove}
+        onDone={(targets) => selection.drop(targets.map((t) => t.id))}
+        onClose={() => setToDelete(null)}
+      />
     </div>
   );
 }
 
-/** On: a new resume's PDF downloads by itself when ready. Off: use the row's PDF button. */
+/** On ("Automatic"): a new resume's PDF downloads by itself when ready. Off ("Manual"): use the row's PDF button. */
 function AutoDownloadSwitch({ on, onChange }: { on: boolean; onChange: (on: boolean) => void }) {
   return (
     <label
@@ -209,6 +245,7 @@ function AutoDownloadSwitch({ on, onChange }: { on: boolean; onChange: (on: bool
         type="button"
         role="switch"
         aria-checked={on}
+        aria-label="Automatic PDF download"
         onClick={() => onChange(!on)}
         className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-500 ${
           on ? "bg-gradient-to-r from-cyan-500 via-indigo-500 to-fuchsia-500" : "bg-slate-300 dark:bg-white/15"
@@ -216,7 +253,7 @@ function AutoDownloadSwitch({ on, onChange }: { on: boolean; onChange: (on: bool
       >
         <span className={`inline-block size-4 rounded-full bg-white shadow transition-transform ${on ? "translate-x-[18px]" : "translate-x-0.5"}`} />
       </button>
-      Auto download
+      <span className="w-[4.5rem]">{on ? "Automatic" : "Manual"}</span>
     </label>
   );
 }

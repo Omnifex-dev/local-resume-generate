@@ -40,6 +40,9 @@ export function redirectToLogin() {
 export function useHistoryRecords(initial: HistoryEntry[], theme: ThemeId) {
   const [records, setRecords] = useState<HistoryEntry[]>(() => [...initial].sort(byNewest));
   const [files, setFiles] = useState<Record<string, FileState>>({});
+  /** Records created or retried since this page loaded (shown as "new"). */
+  const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
+  const markFresh = (ids: string[]) => setFresh((cur) => new Set([...cur, ...ids]));
   const autoDownload = useRef(new Set<string>());
   const themeRef = useRef(theme);
   useEffect(() => {
@@ -104,7 +107,33 @@ export function useHistoryRecords(initial: HistoryEntry[], theme: ThemeId) {
     }
     const { record } = (await res.json()) as { record: HistoryEntry };
     autoDownload.current.add(record.id);
+    markFresh([record.id]);
     setRecords((cur) => mergeRecords(cur, [record]));
+  }, []);
+
+  /**
+   * Retries several failed records in one request; the server runs them one by
+   * one. Returns an error message, or null.
+   */
+  const retryMany = useCallback(async (targets: HistoryEntry[]): Promise<string | null> => {
+    const failed = targets.filter((t) => t.status === "failed");
+    if (failed.length === 0) return null;
+    const res = await fetch("/api/generations/retry", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ids: failed.map((t) => t.id) }),
+    });
+    if (res.status === 401) {
+      redirectToLogin();
+      return null;
+    }
+    if (!res.ok) return errorMessage(res, "Retry failed");
+    const { records: queued } = (await res.json()) as { records: HistoryEntry[] };
+    queued.forEach((r) => autoDownload.current.add(r.id));
+    markFresh(queued.map((r) => r.id));
+    setFiles((f) => ({ ...f, ...Object.fromEntries(queued.map((r) => [r.id, {}])) }));
+    setRecords((cur) => mergeRecords(cur, queued));
+    return null;
   }, []);
 
   /**
@@ -135,6 +164,7 @@ export function useHistoryRecords(initial: HistoryEntry[], theme: ThemeId) {
   /** Adds records just created in this tab; their PDFs download when ready (if auto download is on). */
   const addCreated = useCallback((created: HistoryEntry[]) => {
     created.forEach((r) => autoDownload.current.add(r.id));
+    markFresh(created.map((r) => r.id));
     setRecords((cur) => mergeRecords(cur, created));
   }, []);
 
@@ -165,5 +195,5 @@ export function useHistoryRecords(initial: HistoryEntry[], theme: ThemeId) {
     };
   }, [pendingKey, downloadPdf]);
 
-  return { records, setRecords, files, fetchPdf, downloadPdf, downloadJson, saveEdit, retry, remove, addCreated, generating: pendingIds.length };
+  return { records, setRecords, files, fresh, fetchPdf, downloadPdf, downloadJson, saveEdit, retry, retryMany, remove, addCreated, generating: pendingIds.length };
 }

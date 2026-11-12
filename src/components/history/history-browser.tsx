@@ -2,11 +2,12 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { Modal, Panel, SmallButton, Spinner } from "@/components/ui";
+import { Panel, SmallButton, Spinner } from "@/components/ui";
 import { HISTORY_PAGE_SIZE, inTab, type HistoryEntry, type HistoryPage, type HistoryTab } from "@/lib/history";
 import { THEMES, type ThemeId } from "@/lib/themes";
 import { EditResumeModal, PdfPreviewModal, useRecordDialogs } from "./record-dialogs";
 import { RecordRow, searchInputClass, StatusTabs } from "./record-row";
+import { DeleteRecordsModal, RetrySelectedButton, SelectionBar, useRecordSelection } from "./record-selection";
 import { errorMessage, mergeRecords, redirectToLogin, useHistoryRecords } from "./use-history-records";
 
 type Filters = { tab: HistoryTab; q: string; date: string };
@@ -36,7 +37,7 @@ function pageUrl(f: Filters, cursor: string | null): string {
 
 /** Every record of the user, searchable, loaded page by page as the list scrolls. */
 export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme: ThemeId }) {
-  const { records, setRecords, files, fetchPdf, downloadPdf, downloadJson, saveEdit, retry, remove, generating } = useHistoryRecords(initial.records, theme);
+  const { records, setRecords, files, fetchPdf, downloadPdf, downloadJson, saveEdit, retry, retryMany, remove, generating } = useHistoryRecords(initial.records, theme);
   const dialogs = useRecordDialogs(records);
   const [filters, setFilters] = useState<Filters>({ tab: "created", q: "", date: "" });
   const [queryInput, setQueryInput] = useState("");
@@ -44,9 +45,9 @@ export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [toDelete, setToDelete] = useState<HistoryEntry[] | null>(null);
-  const [selected, setSelected] = useState<Set<string>>(() => new Set());
-  const [deleting, setDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const shown = records.filter((r) => inTab(r, filters.tab));
+  const selection = useRecordSelection(shown);
+  const clearSelection = selection.clear;
   const requestId = useRef(0);
   const sentinel = useRef<HTMLDivElement>(null);
   const firstFilters = useRef(true);
@@ -87,11 +88,11 @@ export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme
       return;
     }
     setRecords([]);
-    setSelected(new Set());
+    clearSelection();
     setCursor(null);
     window.scrollTo({ top: 0 });
     void load(filters, null);
-  }, [filters, load, setRecords]);
+  }, [filters, load, setRecords, clearSelection]);
 
   // Infinite scroll: fetch the next page when the sentinel below the list comes into view.
   // Re-created after every load, so a short page that leaves it visible loads again.
@@ -108,23 +109,7 @@ export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme
     return () => io.disconnect();
   }, [cursor, loading, error, filters, load]);
 
-  const shown = records.filter((r) => inTab(r, filters.tab));
-  // Generating records can't be deleted, so they can't be selected either.
-  const selectable = shown.filter((r) => r.status !== "pending");
-  const chosen = selectable.filter((r) => selected.has(r.id));
-  const allChosen = selectable.length > 0 && chosen.length === selectable.length;
-
-  const toggle = (id: string, on: boolean) =>
-    setSelected((s) => {
-      const next = new Set(s);
-      if (on) next.add(id);
-      else next.delete(id);
-      return next;
-    });
-  const askDelete = (targets: HistoryEntry[]) => {
-    setDeleteError(null);
-    setToDelete(targets);
-  };
+  const askDelete = (targets: HistoryEntry[]) => setToDelete(targets);
   const filtered = Boolean(filters.q.trim() || filters.date);
   const themeName = THEMES.find((t) => t.id === theme)?.name ?? theme;
 
@@ -175,36 +160,9 @@ export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme
           </p>
         ) : (
           <>
-            <div className="mb-2 flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 dark:border-white/10 dark:bg-white/[0.03]">
-              <div className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={allChosen}
-                  ref={(el) => {
-                    if (el) el.indeterminate = chosen.length > 0 && !allChosen;
-                  }}
-                  disabled={selectable.length === 0}
-                  onChange={(e) => setSelected(e.target.checked ? new Set(selectable.map((r) => r.id)) : new Set())}
-                  className="size-4 cursor-pointer accent-indigo-600 dark:accent-cyan-400"
-                />
-                <span>
-                  {chosen.length > 0 ? `${chosen.length} selected` : "Select all"}
-                  {cursor && <span className="text-xs text-slate-500"> ({selectable.length} loaded)</span>}
-                </span>
-              </div>
-              {chosen.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <SmallButton onClick={() => setSelected(new Set())}>Clear selection</SmallButton>
-                  <button
-                    type="button"
-                    onClick={() => askDelete(chosen)}
-                    className="rounded-md bg-red-600 px-3 py-1 text-xs font-medium text-white transition hover:bg-red-700"
-                  >
-                    Delete selected ({chosen.length})
-                  </button>
-                </div>
-              )}
-            </div>
+            <SelectionBar selection={selection} onDelete={askDelete} note={cursor ? `(${selection.selectable.length} loaded)` : undefined}>
+              <RetrySelectedButton selection={selection} retryMany={retryMany} />
+            </SelectionBar>
             <ul className="space-y-1.5" aria-busy={loading}>
               {shown.map((r) => (
                 <RecordRow
@@ -217,8 +175,8 @@ export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme
                   onPreview={() => dialogs.openPreview(r)}
                   onEdit={() => dialogs.openEdit(r)}
                   onDelete={() => askDelete([r])}
-                  selected={selected.has(r.id)}
-                  onSelect={(on) => toggle(r.id, on)}
+                  selected={selection.selected.has(r.id)}
+                  onSelect={(on) => selection.toggle(r.id, on)}
                 />
               ))}
             </ul>
@@ -245,55 +203,12 @@ export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme
       <PdfPreviewModal record={dialogs.preview} theme={theme} fetchPdf={fetchPdf} onEdit={dialogs.openEdit} onClose={dialogs.closePreview} />
       <EditResumeModal record={dialogs.edit} onSave={saveEdit} onClose={dialogs.closeEdit} />
 
-      <Modal
-        open={toDelete !== null}
-        onClose={() => !deleting && setToDelete(null)}
-        title={toDelete && toDelete.length > 1 ? `Delete ${toDelete.length} resumes?` : "Delete resume?"}
-        size="md"
-        footer={
-          <div className="flex w-full items-center justify-end gap-2">
-            <SmallButton onClick={() => setToDelete(null)} disabled={deleting}>
-              Cancel
-            </SmallButton>
-            <button
-              type="button"
-              disabled={deleting}
-              className="flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-red-600/25 transition hover:bg-red-700 disabled:opacity-60"
-              onClick={async () => {
-                if (!toDelete) return;
-                setDeleting(true);
-                const err = await remove(toDelete);
-                setDeleting(false);
-                setSelected((s) => {
-                  const next = new Set(s);
-                  toDelete.forEach((t) => next.delete(t.id));
-                  return next;
-                });
-                if (err) setDeleteError(err);
-                else setToDelete(null);
-              }}
-            >
-              {deleting && <Spinner />}
-              Delete
-            </button>
-          </div>
-        }
-      >
-        <ul className="scroll-panel max-h-60 space-y-1 overflow-y-auto text-sm">
-          {toDelete?.map((t) => (
-            <li key={t.id} className="min-w-0">
-              <span className="block truncate font-medium">{[t.role, t.company].filter(Boolean).join(" · ") || "Untitled resume"}</span>
-              {t.pdfFileName && <span className="block truncate text-xs text-slate-500">{t.pdfFileName}</span>}
-            </li>
-          ))}
-        </ul>
-        <p className="mt-2 text-sm text-slate-600 dark:text-slate-400">{toDelete && toDelete.length > 1 ? "They are" : "It is"} removed from your history for good. PDFs you already downloaded are not affected.</p>
-        {deleteError && (
-          <p role="alert" className="mt-2 text-sm text-red-600 dark:text-red-400">
-            {deleteError}
-          </p>
-        )}
-      </Modal>
+      <DeleteRecordsModal
+        targets={toDelete}
+        remove={remove}
+        onDone={(targets) => selection.drop(targets.map((t) => t.id))}
+        onClose={() => setToDelete(null)}
+      />
     </div>
   );
 }

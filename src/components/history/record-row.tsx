@@ -15,7 +15,7 @@ export function dateSearchText(r: HistoryEntry): string {
 
 export function RecordRow({ record: r, file, onPdf, onJson, onRetry, onPreview, onEdit, onDelete, selected, onSelect, fresh }: {
   record: HistoryEntry;
-  /** Created in this session: tinted so it stands apart from older records. */
+  /** Part of the latest batch: accented and badged "New" so it stands apart from older records. */
   fresh?: boolean;
   /** With onSelect, shows a checkbox (disabled while the record is generating). */
   selected?: boolean;
@@ -36,7 +36,7 @@ export function RecordRow({ record: r, file, onPdf, onJson, onRetry, onPreview, 
 
   return (
     <li
-      className={`rounded-lg border px-3 py-1.5 transition ${selected ? "border-cyan-400/70" : "border-slate-200 dark:border-white/10"} ${selected ? "bg-cyan-50/60 dark:bg-cyan-400/[0.08]" : fresh ? "bg-indigo-50 dark:bg-indigo-400/[0.08]" : "bg-transparent"} ${selected ? "dark:border-cyan-400/40" : ""}`}
+      className={`rounded-lg border px-3 py-1.5 transition ${fresh ? "border-l-4 border-l-fuchsia-500 dark:border-l-fuchsia-400" : ""} ${selected ? "border-cyan-400/70 dark:border-cyan-400/40" : fresh ? "border-indigo-300 dark:border-indigo-400/40" : "border-slate-200 dark:border-white/10"} ${selected ? "bg-cyan-50/60 dark:bg-cyan-400/[0.08]" : fresh ? "bg-indigo-50 dark:bg-indigo-400/[0.12]" : "bg-transparent"}`}
     >
       <div className="flex items-center justify-between gap-2">
         {onSelect && (
@@ -51,6 +51,11 @@ export function RecordRow({ record: r, file, onPdf, onJson, onRetry, onPreview, 
         )}
         <div className="min-w-0 flex-1">
           <p className="flex min-w-0 items-baseline gap-2">
+            {fresh && (
+              <span className="shrink-0 rounded-full bg-fuchsia-600 px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-white dark:bg-fuchsia-500">
+                New
+              </span>
+            )}
             <span className="truncate text-sm font-medium" title={title}>
               {title}
             </span>

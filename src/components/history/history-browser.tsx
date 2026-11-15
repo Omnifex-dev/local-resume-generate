@@ -37,7 +37,7 @@ function pageUrl(f: Filters, cursor: string | null): string {
 
 /** Every record of the user, searchable, loaded page by page as the list scrolls. */
 export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme: ThemeId }) {
-  const { records, setRecords, files, fetchPdf, downloadPdf, downloadJson, saveEdit, retry, retryMany, remove, generating } = useHistoryRecords(initial.records, theme);
+  const { records, setRecords, files, fresh, fetchPdf, downloadPdf, downloadJson, saveEdit, retry, retryMany, remove, generating } = useHistoryRecords(initial.records, theme);
   const dialogs = useRecordDialogs(records);
   const [filters, setFilters] = useState<Filters>({ tab: "created", q: "", date: "" });
   const [queryInput, setQueryInput] = useState("");
@@ -177,6 +177,7 @@ export function HistoryBrowser({ initial, theme }: { initial: HistoryPage; theme
                   onDelete={() => askDelete([r])}
                   selected={selection.selected.has(r.id)}
                   onSelect={(on) => selection.toggle(r.id, on)}
+                  fresh={fresh.has(r.id)}
                 />
               ))}
             </ul>

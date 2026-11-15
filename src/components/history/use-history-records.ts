@@ -27,6 +27,26 @@ export async function errorMessage(res: Response, fallback: string): Promise<str
   return data?.error?.message ?? `${fallback} (HTTP ${res.status}).`;
 }
 
+/** Ids of the latest batch, kept per browser tab so they stay marked "New" across reloads and pages. */
+const FRESH_KEY = "resume-generate:fresh-ids";
+
+function readFresh(): Set<string> {
+  try {
+    const ids = JSON.parse(sessionStorage.getItem(FRESH_KEY) ?? "[]") as unknown;
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeFresh(ids: ReadonlySet<string>) {
+  try {
+    sessionStorage.setItem(FRESH_KEY, JSON.stringify([...ids]));
+  } catch {
+    /* storage blocked: the mark just won't survive a reload */
+  }
+}
+
 export function redirectToLogin() {
   window.location.href = "/login";
 }
@@ -40,9 +60,19 @@ export function redirectToLogin() {
 export function useHistoryRecords(initial: HistoryEntry[], theme: ThemeId) {
   const [records, setRecords] = useState<HistoryEntry[]>(() => [...initial].sort(byNewest));
   const [files, setFiles] = useState<Record<string, FileState>>({});
-  /** Records created or retried since this page loaded (shown as "new"). */
+  /**
+   * The latest batch (shown as "New"): a new batch replaces the previous one;
+   * retries join the current one. Read after mount so server and browser HTML match.
+   */
   const [fresh, setFresh] = useState<ReadonlySet<string>>(() => new Set());
-  const markFresh = (ids: string[]) => setFresh((cur) => new Set([...cur, ...ids]));
+  useEffect(() => setFresh(readFresh()), []);
+  const markFresh = useCallback((ids: string[], replace = false) => {
+    setFresh((cur) => {
+      const next = new Set(replace ? ids : [...cur, ...ids]);
+      writeFresh(next);
+      return next;
+    });
+  }, []);
   const autoDownload = useRef(new Set<string>());
   const themeRef = useRef(theme);
   useEffect(() => {
@@ -109,7 +139,7 @@ export function useHistoryRecords(initial: HistoryEntry[], theme: ThemeId) {
     autoDownload.current.add(record.id);
     markFresh([record.id]);
     setRecords((cur) => mergeRecords(cur, [record]));
-  }, []);
+  }, [markFresh]);
 
   /**
    * Retries several failed records in one request; the server runs them one by
@@ -134,7 +164,7 @@ export function useHistoryRecords(initial: HistoryEntry[], theme: ThemeId) {
     setFiles((f) => ({ ...f, ...Object.fromEntries(queued.map((r) => [r.id, {}])) }));
     setRecords((cur) => mergeRecords(cur, queued));
     return null;
-  }, []);
+  }, [markFresh]);
 
   /**
    * Deletes the records (one or many) and drops them from the list. Records the
@@ -164,9 +194,9 @@ export function useHistoryRecords(initial: HistoryEntry[], theme: ThemeId) {
   /** Adds records just created in this tab; their PDFs download when ready (if auto download is on). */
   const addCreated = useCallback((created: HistoryEntry[]) => {
     created.forEach((r) => autoDownload.current.add(r.id));
-    markFresh(created.map((r) => r.id));
+    markFresh(created.map((r) => r.id), true);
     setRecords((cur) => mergeRecords(cur, created));
-  }, []);
+  }, [markFresh]);
 
   const pendingIds = useMemo(() => records.filter((r) => r.status === "pending").map((r) => r.id), [records]);
   const pendingKey = pendingIds.join(",");

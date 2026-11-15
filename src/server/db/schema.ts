@@ -181,6 +181,8 @@ export const generations = pgTable(
     /** "{role}-{company}-{timestamp}.pdf" / ".json", set once the resume content exists. */
     pdfFileName: varchar("pdf_file_name", { length: 255 }),
     jsonFileName: varchar("json_file_name", { length: 255 }),
+    /** Number among the user's resumes of the creation day, given in job-description order when the record is made. */
+    dayNumber: integer("day_number"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
   },

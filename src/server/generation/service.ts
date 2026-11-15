@@ -1,5 +1,5 @@
 import "server-only";
-import { and, eq, gte, inArray, ne, notInArray } from "drizzle-orm";
+import { and, eq, gte, inArray, max, ne, notInArray, sql } from "drizzle-orm";
 import { fileNumber, resumeFileBase } from "@/lib/filename";
 import { normalizeEdit, type ResumeEdit } from "@/lib/edit-schema";
 import type { JobDescription } from "@/lib/jd";
@@ -95,28 +95,57 @@ async function readyInputs(userId: string) {
   return { snapshot, settings };
 }
 
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/**
+ * The first free number among the user's resumes of today (server's local day):
+ * one more than the highest number used today, so numbers stay unique even after
+ * a delete. Locks per user until `tx` ends, so two batches started at once can't
+ * take the same numbers; insert the numbered records in the same `tx`.
+ */
+async function nextDayNumber(tx: Tx, userId: string, now = new Date()): Promise<number> {
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`generation-number:${userId}`}))`);
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const [row] = await tx
+    .select({ top: max(generations.dayNumber) })
+    .from(generations)
+    .where(and(eq(generations.userId, userId), gte(generations.createdAt, dayStart)));
+  return (row?.top ?? 0) + 1;
+}
+
 /**
  * Creates one pending record per job (role, company, date, job description and the
- * inputs used) and queues them. Returns at once; the AI work runs in the background.
+ * inputs used) and queues them in job order. Returns at once; the AI work runs in
+ * the background. Each record gets its file number now, in job order (job 1 → the
+ * lowest number), so the numbers match the order the job descriptions were entered
+ * in, whatever order the resumes finish in. Creation times are 1 ms apart for the
+ * same reason: the lists sort by them.
  */
 export async function createGenerations(userId: string, jobs: JobDescription[]) {
   const { snapshot, settings } = await readyInputs(userId);
-  const rows = await db
-    .insert(generations)
-    .values(
-      jobs.map((job) => ({
-        userId,
-        status: "pending" as const,
-        role: job.role,
-        company: job.company,
-        jobDescription: job.description,
-        prompt: settings.effectivePrompt,
-        model: settings.effectiveModel,
-        profileSnapshot: snapshot,
-      })),
-    )
-    .returning();
-  rows.forEach((r) => enqueue(r.id));
+  const rows = await db.transaction(async (tx) => {
+    const now = new Date();
+    const first = await nextDayNumber(tx, userId, now);
+    return tx
+      .insert(generations)
+      .values(
+        jobs.map((job, i) => ({
+          userId,
+          status: "pending" as const,
+          role: job.role,
+          company: job.company,
+          jobDescription: job.description,
+          prompt: settings.effectivePrompt,
+          model: settings.effectiveModel,
+          profileSnapshot: snapshot,
+          dayNumber: first + i,
+          createdAt: new Date(now.getTime() + i),
+        })),
+      )
+      .returning();
+  });
+  rows.sort((a, b) => a.dayNumber! - b.dayNumber!).forEach((r) => enqueue(r.id));
   logger.info({ userId, count: rows.length }, "generations queued");
   return rows;
 }
@@ -181,7 +210,7 @@ export async function updateGenerationContent(userId: string, id: string, edit: 
 
   const e = normalizeEdit(edit);
   const content = Object.fromEntries(Object.entries(row.content).map(([k, v]) => [k, e.content[k] ?? v]));
-  const base = resumeFileBase(fileNumber(row.pdfFileName), e.role, e.company);
+  const base = resumeFileBase(row.dayNumber ?? fileNumber(row.pdfFileName), e.role, e.company);
 
   const [updated] = await db
     .update(generations)
@@ -217,18 +246,16 @@ export async function deleteGenerations(userId: string, ids: string[]): Promise<
 }
 
 /**
- * The next free number for a resume finished today (server's local day): one
- * more than the highest number used today, so numbers stay unique even after a
- * delete. Safe without locking because the queue runs one job at a time.
+ * The record's file number. Records made before numbers were given at creation
+ * get the next free one now (and count as created today, so it stays unique).
  */
-async function nextDayNumber(userId: string, now = new Date()): Promise<number> {
-  const dayStart = new Date(now);
-  dayStart.setHours(0, 0, 0, 0);
-  const rows = await db
-    .select({ pdfFileName: generations.pdfFileName })
-    .from(generations)
-    .where(and(eq(generations.userId, userId), eq(generations.status, "succeeded"), gte(generations.finishedAt, dayStart)));
-  return rows.reduce((max, r) => Math.max(max, fileNumber(r.pdfFileName) ?? 0), 0) + 1;
+async function ensureDayNumber(row: { id: string; userId: string; dayNumber: number | null }): Promise<number> {
+  if (row.dayNumber !== null) return row.dayNumber;
+  return db.transaction(async (tx) => {
+    const n = await nextDayNumber(tx, row.userId);
+    await tx.update(generations).set({ dayNumber: n, createdAt: new Date() }).where(eq(generations.id, row.id));
+    return n;
+  });
 }
 
 /** Tries for each resume before it is marked failed and the queue moves on. */
@@ -293,7 +320,7 @@ async function runGeneration(id: string): Promise<void> {
     const role = row.role ?? (ai.target_role.trim().slice(0, 200) || "Role");
     const company = row.company ?? (ai.target_company.trim().slice(0, 200) || "Company");
     // The content (JSON) exists from here on; the PDF is rendered from it on download.
-    const base = resumeFileBase(await nextDayNumber(row.userId), role, company);
+    const base = resumeFileBase(await ensureDayNumber(row), role, company);
 
     await db
       .update(generations)

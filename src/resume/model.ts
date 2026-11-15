@@ -67,6 +67,9 @@ export function parseLanguages(text: string | null | undefined): ResumeModel["la
     });
 }
 
+/** The line under the name is fixed on every resume, regardless of profile headline or target role. */
+export const RESUME_HEADLINE = "Senior AI Software Engineer";
+
 const opt = <K extends string>(key: K, value: string | null | undefined) =>
   (value?.trim() ? { [key]: value.trim() } : {}) as Partial<Record<K, string>>;
 
@@ -89,7 +92,7 @@ export function buildResumeModel(
 
   return {
     name: snapshot.name?.trim() || fallbackName,
-    ...opt("headline", snapshot.headline),
+    headline: RESUME_HEADLINE,
     contact,
     ...opt("summary", extras?.summary),
     experiences: snapshot.experiences.map((e, i) => ({

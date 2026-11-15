@@ -43,7 +43,7 @@ export async function GET(req: Request, { params }: { params: Promise<{ id: stri
   const snapshot = gen.profileSnapshot as ProfileSnapshot;
   try {
     const started = Date.now();
-    const pdf = await resumePdfFor(snapshot, gen.content, gen.extras ?? null, { fallbackName: user.username, theme, pageSize, targetRole: gen.role });
+    const pdf = await resumePdfFor(snapshot, gen.content, gen.extras ?? null, { fallbackName: user.username, theme, pageSize });
     logger.info({ userId: user.id, generationId: id, theme, ms: Date.now() - started, bytes: pdf.length }, "pdf rendered");
 
     // Older records (made before file names were stored) get a name in the same format.

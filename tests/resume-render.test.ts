@@ -4,7 +4,7 @@ import { THEMES } from "@/lib/themes";
 import { contentKeys } from "@/server/ai/resume-content";
 import { findChrome, renderPdf } from "@/server/pdf/chrome";
 import { renderResumeHtml, rich, safeHref } from "@/resume/html";
-import { buildResumeModel, displayUrl, parseLanguages, type ProfileSnapshot } from "@/resume/model";
+import { buildResumeModel, displayUrl, RESUME_HEADLINE, parseLanguages, type ProfileSnapshot } from "@/resume/model";
 import { SAMPLE_EXTRAS, SAMPLE_PROFILE } from "@/resume/sample";
 
 const empty: ProfileSnapshot = { name: null, email: null, phone: null, linkedin: null, github: null, experiences: [], educations: [] };
@@ -38,7 +38,7 @@ describe("buildResumeModel", () => {
       { summary: "", skills: [{ category: "Empty", items: [] }], additional: [] },
     );
     expect(m).toMatchObject({ contact: [], skills: [], languages: [], additional: [] });
-    expect(m).not.toHaveProperty("headline");
+    expect(m.headline).toBe(RESUME_HEADLINE);
     expect(m).not.toHaveProperty("summary");
     expect(m.experiences[0]).not.toHaveProperty("location");
   });
@@ -76,6 +76,7 @@ describe.each(THEMES.map((t) => t.id))("theme %s", (theme) => {
   it("leaves out empty sections, labels and placeholders", () => {
     const html = renderResumeHtml(buildResumeModel(empty, [], "carl"), theme);
     expect(html).toContain("carl");
+    expect(html).toContain(RESUME_HEADLINE);
     for (const word of [
       "Experience",
       "Education",
@@ -84,7 +85,6 @@ describe.each(THEMES.map((t) => t.id))("theme %s", (theme) => {
       "Skills",
       "Languages",
       "Additional",
-      `class="headline"`,
       "LinkedIn",
       "GitHub",
       "<svg",
@@ -110,7 +110,7 @@ describe.each(THEMES.map((t) => t.id))("theme %s", (theme) => {
 
   it("renders headline, location, summary, skills, languages and additional info", () => {
     const html = renderResumeHtml(buildResumeModel(SAMPLE_PROFILE, [["Built **Kafka** pipelines"]], "x", SAMPLE_EXTRAS), theme);
-    expect(html).toContain("Senior Software Engineer");
+    expect(html).toContain("Senior AI Software Engineer");
     expect(html).toContain("Springfield, USA");
     expect(html).toContain("<strong>backend services</strong>");
     expect(html).toContain("Built <strong>Kafka</strong> pipelines");

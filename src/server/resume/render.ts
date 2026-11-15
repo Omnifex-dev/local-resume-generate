@@ -10,10 +10,12 @@ export function resumeHtmlFor(
   snapshot: ProfileSnapshot,
   content: Record<string, string[]>,
   extras: ResumeExtras | null,
-  opts: { fallbackName: string; theme: ThemeId; pageSize: PageSize },
+  opts: { fallbackName: string; theme: ThemeId; pageSize: PageSize; targetRole?: string | null },
 ): string {
   const bullets = contentKeys(snapshot.experiences).map((k) => content[k] ?? []);
-  return renderResumeHtml(buildResumeModel(snapshot, bullets, opts.fallbackName, extras), opts.theme, opts.pageSize);
+  // The line under the name shows the role being applied for, not the profile's generic headline.
+  const headline = opts.targetRole?.trim() || snapshot.headline;
+  return renderResumeHtml(buildResumeModel({ ...snapshot, headline }, bullets, opts.fallbackName, extras), opts.theme, opts.pageSize);
 }
 
 export function resumePdfFor(...args: Parameters<typeof resumeHtmlFor>): Promise<Buffer> {
